@@ -1,10 +1,18 @@
 import axios from 'axios';
 import { z } from 'zod';
+import { TRANSITLAND_API_KEY, TRANSITLAND_BASE_URL, GEOCODER_CA_BASE_URL } from './constants.js';
 
 async function postalCodeToCoordinates(postalCode: string): Promise<[number, number]> {
-  // This is a placeholder. In a real implementation, you would use a geocoding service.
-  // For demonstration, we'll return fixed coordinates for Toronto.
-  return [43.6532, -79.3832];
+  try {
+    const response = await axios.get(`${GEOCODER_CA_BASE_URL}/${postalCode}`, {
+      params: { json: 1 },
+    });
+
+    return [response.data.latt, response.data.longt];
+  } catch (error) {
+    console.error('Failed to geocode postal code.', error);
+    throw new Error('Failed to geocode postal code.');
+  }
 }
 
 export const getNearbyStopsSchema = {
@@ -23,10 +31,9 @@ export const getNearbyStopsSchema = {
 export async function getNearbyStops(params: {postalCode: string}): Promise<{id: string, name: string, distance: number}[]> {
   try {
     const [lat, lon] = await postalCodeToCoordinates(params.postalCode);
-    
-    const response = await axios.get('https://transit.land/api/v2/rest/stops.json', {
+    const response = await axios.get(`${TRANSITLAND_BASE_URL}/stops.json`, {
       params: {
-        api_key: process.env.TRANSITLAND_API_KEY,
+        api_key: TRANSITLAND_API_KEY,
         lat,
         lon,
         radius: 500, // 500 meter radius
