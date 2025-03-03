@@ -18,13 +18,14 @@ async function postalCodeToCoordinates(postalCode: string): Promise<[number, num
 export const getNearbyStopsSchema = {
   name: 'get_nearby_stops',
   description: 'Get nearby TTC stops for a given postal code',
-  parameters: {
+  parameters: z.object({
     postalCode: z.string().describe('The postal code to search near'),
-  },
+  }),
   returns: z.array(z.object({
     id: z.string(),
+    onestopId: z.string(),
     name: z.string(),
-    distance: z.number(),
+    description: z.string(),
   })).describe('A list of nearby stops'),
 };
 
@@ -42,8 +43,10 @@ export async function getNearbyStops(params: {postalCode: string}): Promise<{id:
     });
 
     return response.data.stops.map((stop: any) => ({
-      id: stop.onestop_id,
+      id: stop.stop_id,
+      onestop_id: stop.onestop_id,
       name: stop.stop_name,
+      description: stop.stop_desc,
     }));
   } catch (error) {
     console.error('Error fetching nearby stops:', error);

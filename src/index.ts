@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { getNearbyStops, getNearbyStopsSchema } from "./tools/get-nearby-stops.js";
+import { getNextArrivals, getNextArrivalsSchema } from "./tools/get-next-arrivals.js";
 
 // Create an MCP server
 const server = new McpServer({
@@ -12,11 +13,23 @@ const server = new McpServer({
 // Add the getNearbyStops tool
 server.tool(
   getNearbyStopsSchema.name,
-  getNearbyStopsSchema.parameters,
+  getNearbyStopsSchema.parameters.shape,
   async ({ postalCode }) => {
     const stops = await getNearbyStops({postalCode});
     return {
       content: [{ type: "text", text: JSON.stringify(stops, null, 2) }]
+    };
+  }
+);
+
+// Add the getNextArrivals tool
+server.tool(
+  getNextArrivalsSchema.name,
+  getNextArrivalsSchema.parameters.shape,
+  async ({ stopId, routeId }) => {
+    const arrivals = await getNextArrivals({ stopId, routeId });
+    return {
+      content: [{ type: "text", text: JSON.stringify(arrivals, null, 2) }]
     };
   }
 );

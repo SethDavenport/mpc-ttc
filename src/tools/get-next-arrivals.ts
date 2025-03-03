@@ -1,45 +1,70 @@
 import axios from 'axios';
+import { z } from 'zod';
+import { TRANSITLAND_API_KEY } from './constants.js';
 
-const TRANSITLAND_API_KEY = process.env.TRANSITLAND_API_KEY;
+export const getNextArrivalsSchema = {
+  name: 'get_next_arrivals',
+  description: 'Get next arrival times for a specific TTC stop and route',
+  parameters: z.object({
+    stopId: z.string().describe('The ID of the stop to get arrivals for'),
+    routeId: z.string().optional().describe('Optional: The ID of the route to filter arrivals'),
+  }),
+  returns: z.array(z.object({
+    stopId: z.string(),
+    stopName: z.string(),
+    departures: z.array(z.object({
+      routeId: z.string(),
+      departureTime: z.string(),
+      routeName: z.string(),
+    })),
+  })).describe('A list of upcoming arrivals'),
+};
 
-export async function getNextArrivals(stopId: string, routeId?: string) {
+
+type Params = z.infer<typeof getNextArrivalsSchema['parameters']>;
+type RVal = z.infer<typeof getNextArrivalsSchema['returns']>;
+export async function getNextArrivals(params: Params): Promise<RVal> {
   try {
-    const response = await axios.get('https://transit.land/api/v2/rest/stop_times', {
+    const response = await axios.get(`https://transit.land/api/v2/rest/stops/${params.stopId}/departures`, {
       params: {
         api_key: TRANSITLAND_API_KEY,
-        stop_onestop_id: stopId,
-        route_onestop_id: routeId,
+        stop_key: params.stopId,
         limit: 5,
-        sort_by: 'arrival_time',
+        sort_by: 'departure_time',
       },
     });
 
-    const arrivals = response.data.stop_times.map((stopTime: any) => ({
-      routeId: stopTime.route_onestop_id,
-      routeName: stopTime.route_name,
-      arrivalTime: stopTime.arrival_time,
-      departureTime: stopTime.departure_time,
-      tripHeadsign: stopTime.trip_headsign,
-    }));
+    const acc: Record<string, RVal[number]> = {};
+    for (const stop of response.data.stops) {
+      const departures = acc[stop.onestop_id]?.departures || [];
+      const newDepartures = stop.departures.map((d: any) => ({
+        routeId: d.trip.route_onestop_id,
+        departureTime: d.departure.scheduled_utc,
+        routeName: d.trip.trip_headsign,
+      }));
+      
+      // Deduplicate departures
+      const uniqueDepartures = [...departures, ...newDepartures].reduce((unique: any[], item) => {
+        const exists = unique.find(u => 
+          u.routeId === item.routeId && 
+          u.departureTime === item.departureTime && 
+          u.routeName === item.routeName
+        );
+        if (!exists) {
+          unique.push(item);
+        }
+        return unique;
+      }, []);
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(arrivals, null, 2),
-        },
-      ],
-    };
+      acc[stop.onestop_id] = {
+        stopId: stop.onestop_id,
+        stopName: stop.stop_name,
+        departures: uniqueDepartures,
+      };
+    }
+    return Object.values(acc);
   } catch (error) {
     console.error('Error fetching next arrivals:', error);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Error fetching next arrivals. Please try again later.',
-        },
-      ],
-      isError: true,
-    };
+    throw new Error('Failed to fetch next arrivals. Please try again later.');
   }
 }
